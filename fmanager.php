@@ -26,12 +26,10 @@ class EntryPointManager
     
     public function handleRequest()
     {
-        if (!empty($_REQUEST['action'])) {
-            $action = $_REQUEST['action'];
+        $action = getRequestParam('action', '');
 
-            if (in_array($action, $this->actionList)) {
-                $this->$action();
-            }
+        if (in_array($action, $this->actionList)) {
+            $this->$action();
         } else {
             header('Location: ?action=getFileList');
             exit();
@@ -40,13 +38,8 @@ class EntryPointManager
 
     protected function getFileList()
     {   
-        $path = '';
+        $path = getRequestParam('path', '');
         $isImageScript = false;
-
-        if (!empty($_REQUEST['path'])) {  
-            $path = $_REQUEST['path'];
-        }
-
         $this->handlePost($path);
         $output[] = '<style>body,html{font-family:arial;font-size:14px}.right{color:#cc8c16}'
             . '.chmod{color:#aaa;}.owner{color:#24bf7c}.size{color:#7a7;}'
@@ -124,8 +117,8 @@ class EntryPointManager
                     $output[] = '<tr>'
                         . '<td style="position:relative;">'
                         . '<a href="' 
-                         . '?action=getInfo&log=' . urlencode($realPath)  
-                        . '" style="color:#0D6DAEFF" class="' . ($isImage ? 'thumb' : '') . '" ' . ($isImage ? (' data-hover-src="?action=getInfo&log=' . urlencode($realPath) . '"') : '') . '>' . $name 
+                         . '?action=getInfo&file=' . urlencode($realPath)  
+                        . '" style="color:#0D6DAEFF" class="' . ($isImage ? 'thumb' : '') . '" ' . ($isImage ? (' data-hover-src="?action=getInfo&file=' . urlencode($realPath) . '"') : '') . '>' . $name 
                         . ($isImage ? (' <span><img src="" /></span>') : '')
                         . '</a>'
                         . '</td>'
@@ -158,7 +151,6 @@ class EntryPointManager
                 triggers.forEach(trigger => {
                     trigger.addEventListener('mouseenter', () => {
                         const hoverImage = trigger.querySelector('img');
-                        console.log(hoverImage.getAttribute('src'));
                         if (!hoverImage.getAttribute('src')) {
                             hoverImage.src = trigger.getAttribute('data-hover-src');
                         }
@@ -167,16 +159,19 @@ class EntryPointManager
                 });</script>";
         }
 
+        ob_clean();
         file_put_contents('php://output', implode(' ', $output));
     }
 
     protected function getInfo()
     {
-        $log = !empty($_REQUEST['log']) ? $_REQUEST['log'] : '';
-        $filePath =  $this->fileManager->root . '/' . $log;
+        $file = getRequestParam('file');
+        $filePath =  $this->fileManager->root . '/' . $file;
 
         if (file_exists($filePath)) {
             $pathinfo = pathinfo($filePath);
+
+            ob_clean();
             
             if (
                 isset($pathinfo['extension']) 
@@ -206,7 +201,7 @@ class EntryPointManager
                     . 'pre[class*="language-"] > code{margin-top:2px;background-size: 40px 40px;}'
                     . 'pre[class*="language-"]::after, pre[class*="language-"]::before{box-shadow:none;}'
                     . '</style>'
-                    . '<p style="color:#54BCFEFF;padding-left:10px">' . $this->makeReturnPath($log, false) . '</p>'
+                    . '<p style="color:#54BCFEFF;padding-left:10px">' . $this->makeReturnPath($file, false) . '</p>'
                     . '<table><tr>';
                 $lines = [];
                 $lines = file($filePath);
@@ -259,14 +254,13 @@ class EntryPointManager
                         && !in_array($pathinfo['extension'], $this->notEditableExt)
                     ) || !isset($pathinfo['extension'])
                 ) {
-                    $info = '<p style="color:#54BCFEFF;background-color:#efefef;padding:10px">' . $this->makeReturnPath($log, false) . '</p>';
+                    $info = '<p style="color:#54BCFEFF;background-color:#efefef;padding:10px">' . $this->makeReturnPath($file, false) . '</p>';
                     $info .= '<pre style="padding:10px">' . htmlentities($content) . '</pre><br>';
                 } else {
                     $info = $content;
                     header('Content-Type: ' . Mime::getType($pathinfo['basename']));
                 }
 
-                ob_clean();
                 file_put_contents('php://output', $info);
             }
         }
@@ -367,6 +361,7 @@ class EntryPointManager
             }
         }
 
+        ob_clean();
         file_put_contents('php://output', $output);
     }
 
@@ -467,35 +462,24 @@ class EntryPointManager
         $path = trim($path);
         $breadCrumbs = [];
         $temp = [];
+        $fileName = '';
 
         if (!empty($path)) {
             $arr = explode('/', $path);
-            array_pop($arr);
+            $fileName = array_pop($arr);
             $href = '?action=getFileList';
 
             if (count($arr) > 0) {
                 $href .= '&path=' . implode('/', $arr);
             }
 
-            $arr = explode('/', $path);
-
-            if ($isDir) {
-                foreach ($arr as $pathName) {
-                    $temp[] = $pathName;
-                    $breadCrumbs[] = '<a style="color:#54BCFEFF;" href="?action=getFileList&path=' . urlencode(implode('/', $temp)) . '">' . $pathName . '</a>';
-                }
-
-                $result = '<a href="' . $href . '" style="font-family:Tahoma;text-decoration:none">🔙</a> <i style="color:#54BCFEFF;margin-left:20px">' . implode('/', $breadCrumbs) . '</i> <br>';
-            } else {
-                $fileName = array_pop($arr);
-
-                foreach ($arr as $pathName) {
-                    $temp[] = $pathName;
-                    $breadCrumbs[] = '<a style="color:#54BCFEFF;" href="?action=getFileList&path=' . urlencode(implode('/', $temp)) . '">' . $pathName . '</a>';
-                }
-
-                $result = '<a href="' . $href . '" style="font-family:Tahoma;text-decoration:none">🔙</a> <i style="color:#54BCFEFF;margin-left:20px">' . implode('/', $breadCrumbs) . '/' . $fileName . '</i>';
+            foreach ($arr as $pathName) {
+                $temp[] = $pathName;
+                $breadCrumbs[] = '<a style="color:#54BCFEFF;" href="?action=getFileList&path=' . urlencode(implode('/', $temp)) . '">' . $pathName . '</a>';
             }
+
+            $result = '<a href="' . $href . '" style="font-family:Tahoma;text-decoration:none">🔙</a>' 
+                . '<i style="color:#54BCFEFF;margin-left:20px">' . implode('/', $breadCrumbs) . ($isDir ? '' : ('/' . $fileName)) . '</i>';
         }
 
         return $result;
@@ -797,7 +781,7 @@ class FileManager
 
         $result = false;
 
-        if (!empty($_FILES) && !empty($_FILES['file']['name'])) {
+        if (!empty($_FILES['file']['name'])) {
             $newfile = $_FILES['file']['name'];
             $absPath .= '/' . $newfile;
             move_uploaded_file($_FILES['file']['tmp_name'], $absPath);
